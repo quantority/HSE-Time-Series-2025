@@ -455,3 +455,220 @@ arima - моделируем зависимость между наблюден�
 
 Автокорреляция измеряет линейную связь между наблюдениями одного временного ряда xt и теми же наблюдениями, сдвинутыми на k шагов во времени xt−k
 
+![alt text](image-12.png)
+
+![alt text](image-13.png)
+
+![alt text](image-14.png)
+
+__Расчет в Python__
+
+
+```python
+import numpy as np
+import pandas as pd
+import statsmodels.api as sm
+from statsmodels.tsa.stattools import acf, pacf
+import matplotlib.pyplot as plt
+
+# Наши данные
+y = [5, 6, 8, 7, 9]
+
+# 1. Расчет ACF в Python
+# Параметр nlags=4, чтобы увидеть лаги с 0 по 4 (хотя у нас данных мало)
+acf_values = acf(y, nlags=4, fft=False)  # fft=False для точного расчета (не быстрого преобразования Фурье)
+print("ACF значения (лаг 0-4):", acf_values)
+
+# 2. Расчет PACF в Python
+# Метод 'ols' (Ordinary Least Squares) - использует регрессию
+pacf_values = pacf(y, nlags=4, method='ols')
+print("PACF значения (лаг 0-4):", pacf_values)
+```
+```text
+ACF значения (лаг 0-4): [1.    0.1   0.   -0.25 -0.3 ]
+PACF значения (лаг 0-4): [1.    0.1  -0.125 0.   -0.   ]
+```
+
+![alt text](image-15.png)
+
+1. Почему классическая ACF "слепа" к нелинейностям?
+
+Классическая ACF, которую мы считали выше — это корреляция Пирсона. Она измеряет только линейную зависимость.
+
+![alt text](image-16.png)
+
+```python
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import statsmodels.api as sm
+from scipy import stats
+
+# Сгенерируем два примера: линейный и нелинейный
+np.random.seed(42)
+n = 300
+
+# 1. Линейный процесс AR(1)
+y_linear = [0]
+for i in range(1, n):
+    y_linear.append(0.7 * y_linear[-1] + np.random.normal(0, 1))
+
+# 2. Нелинейный процесс (квадратичный)
+y_nonlinear = [0]
+errors = np.random.normal(0, 0.5, n)
+for i in range(1, n):
+    # y_t = 0.3 * (y_{t-1})^2 + e_t
+    y_nonlinear.append(0.3 * y_nonlinear[-1]**2 + errors[i])
+
+# Превращаем в массивы pandas для удобства
+df = pd.DataFrame({
+    'linear': y_linear,
+    'nonlinear': y_nonlinear
+})
+
+# Строим scatter plots
+fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+
+# Лаг 1 для линейного процесса
+axes[0, 0].scatter(df['linear'].shift(1), df['linear'], alpha=0.5)
+axes[0, 0].set_title(f'Линейный процесс: Лаг 1\nКорреляция Пирсона: {df["linear"].corr(df["linear"].shift(1)):.3f}')
+axes[0, 0].set_xlabel('y_{t-1}')
+axes[0, 0].set_ylabel('y_t')
+
+# Лаг 1 для нелинейного процесса
+axes[0, 1].scatter(df['nonlinear'].shift(1), df['nonlinear'], alpha=0.5)
+pearson_corr = df['nonlinear'].corr(df['nonlinear'].shift(1))
+axes[0, 1].set_title(f'Нелинейный процесс: Лаг 1\nКорреляция Пирсона: {pearson_corr:.3f}')
+axes[0, 1].set_xlabel('y_{t-1}')
+axes[0, 1].set_ylabel('y_t')
+
+# Добавим линию регрессии (чтобы показать, что она плохо ложится)
+from scipy import stats
+
+# Для нелинейного - покажем, что линия не подходит
+x = df['nonlinear'].shift(1).dropna()
+y = df['nonlinear'][1:]
+z = np.polyfit(x, y, 1)
+p = np.poly1d(z)
+axes[0, 1].plot(x.sort_values(), p(x.sort_values()), "r--", alpha=0.8, label='Линейная подгонка')
+
+# Добавим квадратичную подгонку для сравнения
+z2 = np.polyfit(x, y, 2)
+p2 = np.poly1d(z2)
+axes[0, 1].plot(x.sort_values(), p2(x.sort_values()), "g-", alpha=0.8, label='Квадратичная подгонка')
+axes[0, 1].legend()
+
+plt.tight_layout()
+plt.show()
+```
+
+![alt text](image-17.png)
+
+![alt text](image-18.png)
+
+![alt text](image-19.png)
+
+![alt text](image-20.png)
+
+![alt text](image-21.png)
+
+SARIMA 
+
+S - пытаемся очистить ряд от сезонности
+
+I - интеграция, пытаемся очистить ряд от тренда
+
+Оставшийся ряд мы считаем стационарный и пытаемся его приближать с помощью модели ARMA
+
+![alt text](image-11.png)
+
+Выше приведен пример двух рядов
+
+Слева обычный временной ряд 
+
+L - некоторый уровень ряда (первая точка с которого он начинается)
+
+betat - тренда
+
+A * sin - сезонность
+
+et - ошибка из нормального распределения
+
+Справа помимо прочего в ошибку добавлена автокорреляция
+
+Arima лучше справляется с рядом в котором в остатках есть автокорреляция
+
+Почему так происходит?
+
+Потому что arima модели как раз направлены на моделирование автокорреляций в значении ряда и в остатках
+
+![alt text](image-22.png)
+
+Модели ARIMA состоят из двух частей AR - авторегрессионная часть и MA часть
+
+AR - по сути это просто линейное выражение значения yt через его предыдущие p значений
+
+MA - это попытка через наши ошибки на прошлых значениях прогнозирования выразить текущее значение
+
+![alt text](image-23.png)
+
+![alt text](image-24.png)
+
+![alt text](image-25.png)
+
+![alt text](image-26.png)
+
+![alt text](image-27.png)
+
+![alt text](image-28.png)
+
+![alt text](image-29.png)
+
+![alt text](image-30.png)
+
+![alt text](image-31.png)
+
+![alt text](image-43.png)
+
+![alt text](image-33.png)
+
+![alt text](image-34.png)
+
+![alt text](image-35.png)
+
+![alt text](image-36.png)
+
+Почему вообще arima модели считаются такими классными
+
+Теоретическая мотивация - Теорема Вольда
+
+Которая нам говорит, что любой стационарный в широкм смысле процесс, мы можем аппроксимировать с заранее заданной точностью, при условии, что мы не ограничены в выборе того, какого порядка у нас p и q
+
+![alt text](image-37.png)
+
+![alt text](image-38.png)
+
+Параметры pdq
+
+p - то на сколько далеко смотрит AR часть
+
+d - порядок дифференчирования
+
+q - на сколько далеко смотрит MA часть
+
+![alt text](image-39.png)
+
+Это логично, так как нам нужно взять первые несколько линейно зависимых лагов
+
+![alt text](image-40.png)
+
+![alt text](image-41.png)
+
+![alt text](image-42.png)
+
+![alt text](image-45.png)
+
+![alt text](image-46.png)
+
+
+
